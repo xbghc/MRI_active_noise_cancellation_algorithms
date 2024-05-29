@@ -60,12 +60,6 @@ class EDITER:
 
         return [[detectors[:, :, i:j], e[:, i:j]] for i, j in ranges]
 
-    def cut_e(self, e):
-        delta_kx, delta_ky = self.window_size
-        kx, ky = e.shape
-        e = e[(delta_kx-1)//2:kx-(delta_kx-1)//2, (delta_ky-1)//2:ky-(delta_ky-1)//2]
-        return e
-
     def get_H(self, datas):
         H = []
         for detectors_in_group, e_in_group in datas:
@@ -124,15 +118,17 @@ if __name__ == '__main__':
     # FIXME 并未做T2成像所得.mrd文件的数据处理
 
     data_loader = DataLoader("datasets/HYC", set_id=4)
-    primary_coil_data, extermal_coils_data = data_loader.load_train_data()
+    primary_coil_data, external_coils_data = data_loader.load_data('noise')[0]
 
     editer = EDITER(W=32, window_size=(3, 1))
-    editer.train(extermal_coils_data[:, 0, :, :], primary_coil_data[0])
+    editer.train(external_coils_data, primary_coil_data)
 
     primary_coil_data, extermal_coils_data = data_loader.load_test_data()
     image_index = 5
-    s_and_e = primary_coil_data[image_index]
-    s = editer.cancel_noise(s_and_e, extermal_coils_data[:, image_index,:,:])
+    primary_coil_data, external_coils_data = data_loader.load_data('scan')[image_index]
+
+    s_and_e = primary_coil_data
+    s = editer.cancel_noise(s_and_e, external_coils_data)
 
     x, y = s_and_e.shape
     noise_img = reconImagesByFFT(s_and_e.reshape(1, 1, 1, x, 1, y), 256)[0]

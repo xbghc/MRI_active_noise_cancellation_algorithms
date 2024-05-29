@@ -102,7 +102,7 @@ class DataLoader:
         return output
 
     @staticmethod
-    def reshape_data_to_2d(primary_coil_data, external_coils_data):
+    def reshape_data_to_2d(primary_coil_data, external_coils_data):  # FIXME 重构函数
         primary_coil_data = np.array(primary_coil_data)
         external_coils_data = np.array(external_coils_data)
 
@@ -123,50 +123,30 @@ class DataLoader:
         self.root = root
         self.set_id = set_id
 
-    def load_train_data(self, exp_id=1):
-        path = os.path.join(self.root, 'set {}'.format(self.set_id), 'noise data', 'exp{}'.format(exp_id))
+    def load_data(self, data_type, exp_id=1):
+        path = os.path.join(self.root, f'set {self.set_id}', f'{data_type} data', f'exp{exp_id}')  # set 1，exp1注意空格
         if not os.path.exists(path):
             logging.error('The experiment path does not exist!')
             return None
 
-        with open(os.path.join(path, 'noise1.mrd'), 'rb') as f:
-            primary_coil_data = self.parse_mrd(f.read())['data'][0]
+        with open(os.path.join(path, f'{data_type}1.mrd'), 'rb') as f:
+            all_primary_data = self.parse_mrd(f.read())['data'][0]
 
-        external_coils_data = []
+        all_external_data = []
         i = 2
         while True:
-            data_path = os.path.join(path, 'noise{}.mrd'.format(i))
+            data_path = os.path.join(path, f'{data_type}{i}.mrd')
             if not os.path.exists(data_path):
                 break
             with open(data_path, 'rb') as f:
-                external_coils_data.append(self.parse_mrd(f.read())['data'][0])
+                all_external_data.append(self.parse_mrd(f.read())['data'][0])
             i += 1
 
-        return self.reshape_data_to_2d(primary_coil_data, external_coils_data)
-
-    def load_test_data(self, exp_id=1):
-        path = os.path.join(self.root, 'set {}'.format(self.set_id), 'scan data', 'exp{}'.format(exp_id))
-        if not os.path.exists(path):
-            logging.error('The experiment path does not exist!')
-            return None
-
-        with open(os.path.join(path, 'scan1.mrd'), 'rb') as f:
-            primary_coil_data = self.parse_mrd(f.read())['data'][0]
-
-        external_coils_data = []
-        i = 2
-        while True:
-            data_path = os.path.join(path, 'scan{}.mrd'.format(i))
-            if not os.path.exists(data_path):
-                break
-            with open(data_path, 'rb') as f:
-                external_coils_data.append(self.parse_mrd(f.read())['data'][0])
-            i += 1
-
-        primary_coil_data = np.array(primary_coil_data)
-        external_coils_data = np.array(external_coils_data)
-
-        return self.reshape_data_to_2d(primary_coil_data, external_coils_data)
+        all_primary_data, all_external_data = self.reshape_data_to_2d(all_primary_data, all_external_data)
+        datas = []
+        for i in range(all_primary_data.shape[0]):
+            datas.append([all_primary_data[i, :, :], all_external_data[:, i, :, :]])
+        return datas
 
     def set_set_id(self, set_id):
         self.set_id = set_id
