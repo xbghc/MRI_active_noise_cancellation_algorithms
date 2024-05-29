@@ -102,16 +102,16 @@ class DataLoader:
         return output
 
     @staticmethod
-    def reshape_data_to_2d(primary_coil_data, external_coils_data):  # FIXME 重构函数
-        primary_coil_data = np.array(primary_coil_data)
-        external_coils_data = np.array(external_coils_data)
+    def reshape_data_to_2d(prim_coil, ext_coils):  # FIXME 重构函数
+        prim_coil = np.array(prim_coil)
+        ext_coils = np.array(ext_coils)
 
-        experiments, echoes, slices, views, views2, samples = primary_coil_data.shape # 手册上的views2实际发现是slices
-        coil_num = external_coils_data.shape[0]
+        experiments, echoes, slices, views, views2, samples = prim_coil.shape  # 手册上的views2实际发现是slices
+        coil_num = ext_coils.shape[0]
 
-        primary_coil_data = primary_coil_data.reshape((views, views2, samples))
-        external_coils_data = external_coils_data.reshape((coil_num, views, views2, samples))
-        return np.swapaxes(primary_coil_data, 0, 1), np.swapaxes(external_coils_data, 1, 2)
+        prim_coil = prim_coil.reshape((views, views2, samples))
+        ext_coils = ext_coils.reshape((coil_num, views, views2, samples))
+        return np.swapaxes(prim_coil, 0, 1), np.swapaxes(ext_coils, 1, 2)
 
     def __init__(self, root, set_id=1):
         if not os.path.exists(root):
@@ -130,22 +130,22 @@ class DataLoader:
             return None
 
         with open(os.path.join(path, f'{data_type}1.mrd'), 'rb') as f:
-            all_primary_data = self.parse_mrd(f.read())['data'][0]
+            all_prim_coil = self.parse_mrd(f.read())['data'][0]
 
-        all_external_data = []
+        all_ext_coils = []
         i = 2
         while True:
             data_path = os.path.join(path, f'{data_type}{i}.mrd')
             if not os.path.exists(data_path):
                 break
             with open(data_path, 'rb') as f:
-                all_external_data.append(self.parse_mrd(f.read())['data'][0])
+                all_ext_coils.append(self.parse_mrd(f.read())['data'][0])
             i += 1
 
-        all_primary_data, all_external_data = self.reshape_data_to_2d(all_primary_data, all_external_data)
+        all_prim_coil, all_ext_coils = self.reshape_data_to_2d(all_prim_coil, all_ext_coils)
         datas = []
-        for i in range(all_primary_data.shape[0]):
-            datas.append([all_primary_data[i, :, :], all_external_data[:, i, :, :]])
+        for i in range(all_prim_coil.shape[0]):
+            datas.append([all_prim_coil[i, :, :], all_ext_coils[:, i, :, :]])
         return datas
 
     def set_set_id(self, set_id):
