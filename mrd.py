@@ -101,18 +101,6 @@ class DataLoader:
 
         return output
 
-    @staticmethod
-    def reshape_data_to_2d(prim_coil, ext_coils):  # FIXME 重构函数
-        prim_coil = np.array(prim_coil)
-        ext_coils = np.array(ext_coils)
-
-        experiments, echoes, slices, views, views2, samples = prim_coil.shape  # 手册上的views2实际发现是slices
-        coil_num = ext_coils.shape[0]
-
-        prim_coil = prim_coil.reshape((views, views2, samples))
-        ext_coils = ext_coils.reshape((coil_num, views, views2, samples))
-        return np.swapaxes(prim_coil, 0, 1), np.swapaxes(ext_coils, 1, 2)
-
     def __init__(self, root, set_id=1):
         if not os.path.exists(root):
             logging.error('The root path does not exist!')
@@ -130,23 +118,26 @@ class DataLoader:
             return None
 
         with open(os.path.join(path, f'{data_type}1.mrd'), 'rb') as f:
-            all_prim_coil = self.parse_mrd(f.read())['data'][0]
+            prim_mrd_data = self.parse_mrd(f.read())['data'][0]
 
-        all_ext_coils = []
+        ext_mrds_data = []
         i = 2
         while True:
             data_path = os.path.join(path, f'{data_type}{i}.mrd')
             if not os.path.exists(data_path):
                 break
             with open(data_path, 'rb') as f:
-                all_ext_coils.append(self.parse_mrd(f.read())['data'][0])
+                ext_mrds_data.append(self.parse_mrd(f.read())['data'][0])
             i += 1
 
-        all_prim_coil, all_ext_coils = self.reshape_data_to_2d(all_prim_coil, all_ext_coils)
-        datas = []
-        for i in range(all_prim_coil.shape[0]):
-            datas.append([all_prim_coil[i, :, :], all_ext_coils[:, i, :, :]])
-        return datas
+        # reshape
+        experiments, echoes, slices, views, views2, samples = prim_mrd_data.shape
+        return [
+                [
+                    prim_mrd_data[             0, 0, 0, :, i, :],
+                    np.array(ext_mrds_data)[:, 0, 0, 0, :, i, :]
+                ]
+                for i in range(views2)]
 
     def set_set_id(self, set_id):
         self.set_id = set_id
