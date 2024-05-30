@@ -1,5 +1,8 @@
+import time
+
 from mrd import reconImagesByFFT
 import matplotlib.pyplot as plt
+from yanglei import yanglei
 
 
 class Comparison:
@@ -28,31 +31,26 @@ class Comparison:
     def show(self):
         data_size = len(self._datas)
         algorithm_size = len(self._algorithms)
-
-        # i = 0
-        # for j in range(data_size):
-        #     plt.subplot(data_size, algorithm_size + 1, i+1)
-        #     plt.imshow(self.original_image(j), cmap='gray')
-        #     i += 1
-        #
-        #     for algorithm_name in self._algorithms:
-        #         plt.subplot(data_size, algorithm_size + 1, i+1)
-        #         plt.imshow(self.denoise_image(j, algorithm_name), cmap='gray')
-        #         i += 1
+        title_size = 100
+        # plt.subplots_adjust(top=10)
 
         for j in range(data_size):
             plt.figure(figsize=(10 * (algorithm_size + 1), 10))
             plt.subplot(1, algorithm_size+1, 1)
+            plt.title('origin', fontsize=title_size)
+
             plt.imshow(self.original_image(j), cmap='gray')
 
             i = 1
             for algorithm_name in self._algorithms:
                 plt.subplot(1, algorithm_size+1, i+1)
+                plt.title(algorithm_name, fontsize=title_size)
                 plt.imshow(self.denoise_image(j, algorithm_name), cmap='gray')
                 i += 1
 
             plt.tight_layout()
             plt.show()
+            time.sleep(1)
 
 
 if __name__ == '__main__':
@@ -69,5 +67,6 @@ if __name__ == '__main__':
     for prim, ext in data_loader.load_data('scan'):
         comparison.add_data(prim, ext)
     comparison.add_algorithm(editer.cancel_noise, 'EDITER')
+    comparison.add_algorithm(yanglei, 'yanglei')
 
     comparison.show()
