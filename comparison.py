@@ -1,5 +1,7 @@
 import time
 
+import numpy as np
+
 from mrd import reconImagesByFFT
 import matplotlib.pyplot as plt
 from yanglei import yanglei
@@ -9,6 +11,12 @@ class Comparison:
     def __init__(self):
         self._datas = []
         self._algorithms = {}
+        self.title_setting = {
+            "fontsize": 10,
+            "loc": "left",
+            "y": 0.8,
+            "color": "white"
+        }
 
     def add_data(self, pri_data, ext_data):
         self._datas.append([pri_data, ext_data])
@@ -28,29 +36,59 @@ class Comparison:
         data = denoise_kdata.reshape(1, 1, 1, views, 1, samples)
         return reconImagesByFFT(data, (256, 256))[0]
 
-    def show(self):
+    def diff_image(self, index, algorithm_name):
+        diff = self.original_image(index) - self.denoise_image(index, algorithm_name)
+        diff -= diff.min()
+        return diff
+
+    def show_images(self):
         data_size = len(self._datas)
         algorithm_size = len(self._algorithms)
-        title_size = 100
-        # plt.subplots_adjust(top=10)
+        plt.figure()
+        plt.subplots_adjust(wspace=0.01, hspace=0.01)
 
-        for j in range(data_size):
-            plt.figure(figsize=(10 * (algorithm_size + 1), 10))
-            plt.subplot(1, algorithm_size+1, 1)
-            plt.title('origin', fontsize=title_size)
+        for col in range(data_size):
+            plt.subplot(algorithm_size + 1, data_size, col + 1)
+            if col == 0:
+                plt.title('origin', **self.title_setting)
+            plt.imshow(self.original_image(col), cmap='gray')
+            plt.axis('off')
 
-            plt.imshow(self.original_image(j), cmap='gray')
+        for row, algorithm_name in enumerate(self._algorithms):
+            for col in range(len(self._datas)):
+                plt.subplot(algorithm_size + 1, data_size, (row + 1) * data_size + col + 1)
+                if col == 0:
+                    plt.title(algorithm_name, **self.title_setting)
+                plt.imshow(self.denoise_image(col, algorithm_name), cmap='gray')
+                plt.axis('off')
 
-            i = 1
-            for algorithm_name in self._algorithms:
-                plt.subplot(1, algorithm_size+1, i+1)
-                plt.title(algorithm_name, fontsize=title_size)
-                plt.imshow(self.denoise_image(j, algorithm_name), cmap='gray')
-                i += 1
+        plt.show()
 
-            plt.tight_layout()
-            plt.show()
-            time.sleep(1)
+    def show_diff(self):
+        data_size = len(self._datas)
+        algorithm_size = len(self._algorithms)
+
+        plt.figure()
+        plt.subplots_adjust(wspace=0.01, hspace=0.01)
+        for row, algorithm_name in enumerate(self._algorithms):
+            for col in range(len(self._datas)):
+                plt.subplot(algorithm_size, data_size, row * data_size + col + 1)
+                if col == 0:
+                    plt.title(algorithm_name + '\'s diff', **self.title_setting)
+                plt.imshow(self.diff_image(col, algorithm_name), cmap='gray')
+                plt.axis('off')
+        plt.show()
+
+        plt.figure()
+        plt.subplots_adjust(wspace=0.01, hspace=0.01)
+        for row, algorithm_name in enumerate(self._algorithms):
+            for col in range(len(self._datas)):
+                plt.subplot(algorithm_size, data_size, row * data_size + col + 1)
+                if col == 0:
+                    plt.title(algorithm_name + '\'s diff * 10', **self.title_setting)
+                plt.imshow(self.diff_image(col, algorithm_name) * 10, cmap='gray')
+                plt.axis('off')
+        plt.show()
 
 
 if __name__ == '__main__':
@@ -64,9 +102,10 @@ if __name__ == '__main__':
     editer.train(primary_coil_data, external_coils_data)
 
     comparison = Comparison()
-    for prim, ext in data_loader.load_data('scan'):
+    for prim, ext in data_loader.load_data('scan')[5:9]:
         comparison.add_data(prim, ext)
     comparison.add_algorithm(editer.cancel_noise, 'EDITER')
     comparison.add_algorithm(yanglei, 'yanglei')
 
-    comparison.show()
+    comparison.show_images()
+    comparison.show_diff()
