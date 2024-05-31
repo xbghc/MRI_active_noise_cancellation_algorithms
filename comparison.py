@@ -1,10 +1,5 @@
-import time
-
-import numpy as np
-
 from mrd import reconImagesByFFT
 import matplotlib.pyplot as plt
-from yanglei import yanglei
 
 
 class Comparison:
@@ -94,6 +89,7 @@ class Comparison:
 if __name__ == '__main__':
     from EDITER import EDITER
     from mrd import DataLoader
+    from yanglei import yanglei
 
     data_loader = DataLoader("datasets/HYC", set_id=4)
     primary_coil_data, external_coils_data = data_loader.load_data('noise')[0]
