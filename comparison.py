@@ -94,7 +94,7 @@ if __name__ == '__main__':
     data_loader = DataLoader("datasets/HYC", set_id=4)
     primary_coil_data, external_coils_data = data_loader.load_data('noise')[0]
 
-    editer = EDITER(W=32, window_size=(3, 1))
+    editer = EDITER(W=32)
     editer.train(primary_coil_data, external_coils_data)
 
     comparison = Comparison()

@@ -26,14 +26,14 @@ class EDITER:
             groups_range.append([l, r])
         return groups_range
 
-    def __init__(self, W, window_size=(3, 1)):
+    def __init__(self, W, kernel_size=(0, 0)):
         self.W = W
-        self.window_size = window_size
+        self.kernel_size = kernel_size
         self.model = None
 
     # 生成EMI_conv_matrix
     def EMI_conv_matrix(self, ext_coils):
-        delta_kx, delta_ky = self.window_size
+        delta_kx, delta_ky = [_ * 2 + 1 for _ in self.kernel_size]
         lines = []
         kx, ky = ext_coils[0].shape
         if kx < delta_kx or ky < delta_ky:
@@ -91,12 +91,13 @@ class EDITER:
         print(f"get {len(H_range)} groups.")
 
     def trim_edges(self, prim_coil):
-        delta_kx, delta_ky = self.window_size
+        ksz_x, ksz_y = self.kernel_size
         kx, ky = prim_coil.shape
-        prim_coil = prim_coil[(delta_kx - 1) // 2:kx - (delta_kx - 1) // 2, (delta_ky - 1) // 2:ky - (delta_ky - 1) // 2]
+        prim_coil = prim_coil[ksz_x:kx - ksz_x, ksz_y:ky - ksz_y]
         return prim_coil
 
     def cancel_noise(self, prim_coil, ext_coils):
+        ksz_x, ksz_y = self.kernel_size
         if self.model is None:
             print("You must train the model first!")
             return
@@ -110,9 +111,9 @@ class EDITER:
             kx, ky = prim_coil.shape
             pred_noise = np.zeros((kx, ky), dtype=np.complex64)
             flatten_pred_e = np.dot(E, H[:, i])
-            pred_noise[self.window_size[0] // 2:kx - self.window_size[0] // 2,
-            self.window_size[1] // 2:ky - self.window_size[1] // 2] = flatten_pred_e.reshape(
-                kx - self.window_size[0] + 1, ky - self.window_size[1] + 1)
+            pred_noise[ksz_x:kx - ksz_x,
+            ksz_y:ky - ksz_y] = flatten_pred_e.reshape(
+                kx - 2 * ksz_x, ky - 2 * ksz_y)
             out.append(prim_coil - pred_noise)
         return np.hstack(out)
 
@@ -123,7 +124,7 @@ if __name__ == '__main__':
     data_loader = DataLoader("datasets/HYC", set_id=4)
     primary_coil_data, external_coils_data = data_loader.load_data('noise')[0]
 
-    editer = EDITER(W=32, window_size=(3, 1))
+    editer = EDITER(W=32)
     editer.train(primary_coil_data, external_coils_data)
 
     image_index = 5
