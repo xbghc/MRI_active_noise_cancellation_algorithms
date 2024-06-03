@@ -63,8 +63,7 @@ class EDITER:
     def get_H(self, datas):
         H = []
         for prim_coil, ext_coils in datas:
-            E = self.EMI_conv_matrix(ext_coils)
-            prim_coil = self.trim_edges(prim_coil)
+            E = self.EMI_conv_matrix(self.padding(ext_coils))
             H.append(self.calculate_h(E, prim_coil))
         H = np.array(H).reshape(len(datas), -1).T
         return H
@@ -90,11 +89,12 @@ class EDITER:
 
         print(f"get {len(H_range)} groups.")
 
-    def trim_edges(self, prim_coil):
+        print(f"get {len(correlation_range)} groups.")
+
+    def padding(self, ext_coils):
         ksz_x, ksz_y = self.kernel_size
-        kx, ky = prim_coil.shape
-        prim_coil = prim_coil[ksz_x:kx - ksz_x, ksz_y:ky - ksz_y]
-        return prim_coil
+
+        return np.array([np.pad(coil, ((ksz_x, ksz_x), (ksz_y, ksz_y)), mode='constant', constant_values=0) for coil in ext_coils])
 
     def cancel_noise(self, prim_coil, ext_coils):
         ksz_x, ksz_y = self.kernel_size
@@ -107,13 +107,11 @@ class EDITER:
         out = []
         for i in range(len(H_range)):
             prim_coil, ext_coils = data_groups[i]
+            ext_coils = self.padding(ext_coils)
             E = self.EMI_conv_matrix(ext_coils)
             kx, ky = prim_coil.shape
-            pred_noise = np.zeros((kx, ky), dtype=np.complex64)
             flatten_pred_e = np.dot(E, H[:, i])
-            pred_noise[ksz_x:kx - ksz_x,
-            ksz_y:ky - ksz_y] = flatten_pred_e.reshape(
-                kx - 2 * ksz_x, ky - 2 * ksz_y)
+            pred_noise = flatten_pred_e.reshape(kx, ky)
             out.append(prim_coil - pred_noise)
         return np.hstack(out)
 
