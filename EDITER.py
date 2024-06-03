@@ -15,7 +15,7 @@ class EDITER:
 
         H_conj_T = H.conj().T
         C = np.dot(H_conj_T, H)
-        C_threshold = (C >= threshold).astype(int)
+        C_threshold = (np.abs(C) >= threshold).astype(int)
 
         groups_range = []
         r = 0
