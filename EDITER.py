@@ -10,6 +10,12 @@ class EDITER:
 
         return h
 
+    @staticmethod
+    def transpose_data(prim_matrix, ext_matriex):
+        return prim_matrix.T, np.array(
+            [matrix.T for matrix in ext_matriex]
+        )
+
     def cluster(self, H, threshold=0.5):
         H_normalized = np.zeros_like(H)
         for clin in range(H.shape[1]):
@@ -30,10 +36,11 @@ class EDITER:
             l = r + 1
         return groups_range
 
-    def __init__(self, W, kernel_size=(0, 0)):
+    def __init__(self, W, kernel_size=(0, 0), data_transpose=False):
         self.W = W
         self.kernel_size = kernel_size
         self.model = None
+        self.data_transpose = data_transpose
 
     # 生成EMI_conv_matrix
     def EMI_conv_matrix(self, ext_coils):
@@ -73,6 +80,9 @@ class EDITER:
         return H
 
     def train(self, prim_coil, ext_coils, new_kernel_size=None):
+        if self.data_transpose:
+            prim_coil, ext_coils = self.transpose_data(prim_coil, ext_coils)
+
         groups = self.divide_data_into_temporal_groups(prim_coil, ext_coils)
         H = self.get_H(groups)
 
@@ -96,10 +106,13 @@ class EDITER:
         return np.array([np.pad(coil, ((ksz_x, ksz_x), (ksz_y, ksz_y)), mode='constant', constant_values=0) for coil in ext_coils])
 
     def cancel_noise(self, prim_coil, ext_coils):
-        ksz_x, ksz_y = self.kernel_size
+        if self.data_transpose:
+            prim_coil, ext_coils = self.transpose_data(prim_coil, ext_coils)
+
         if self.model is None:
             print("You must train the model first!")
             return
+
         H, H_range = self.model
         # group s_e by H_range
         data_groups = self.divide_data_into_temporal_groups(prim_coil, ext_coils, H_range)
@@ -112,7 +125,12 @@ class EDITER:
             flatten_pred_e = np.dot(E, H[:, i])
             pred_noise = flatten_pred_e.reshape(kx, ky)
             out.append(prim_coil - pred_noise)
-        return np.hstack(out)
+        out = np.hstack(out)
+
+        if self.data_transpose:
+            out = out.T
+        return out
+
 
 
 if __name__ == '__main__':
