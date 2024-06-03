@@ -6,7 +6,8 @@ from mrd import DataLoader, reconImagesByFFT
 class EDITER:
     @staticmethod
     def calculate_h(E, prim_coil):
-        h = np.linalg.pinv(E) @ prim_coil.flatten()
+        h = np.linalg.lstsq(E, prim_coil.flatten(), rcond=None)[0]
+
         return h
 
     def cluster(self, H, threshold=0.5):
@@ -71,26 +72,21 @@ class EDITER:
         H = np.array(H).reshape(len(datas), -1).T
         return H
 
-    def get_clustered_H(self, H, prim_coil, ext_coils):
-        clustered_groups_range = self.cluster(H)
-        width = ext_coils.shape[2] // self.W
-        clustered_groups_range = [[l * width, r * width] for l, r in clustered_groups_range]
-
-        clustered_groups = [[prim_coil[:, i:j], ext_coils[:, :, i:j]] for i, j in clustered_groups_range]
-        clustered_H = [self.calculate_h(self.EMI_conv_matrix(ext_coils), self.trim_edges(prim_coil))
-                       for prim_coil, ext_coils in clustered_groups]
-        return np.array(clustered_H).T, clustered_groups_range
-
-    def train(self, prim_coil, ext_coils):
+    def train(self, prim_coil, ext_coils, new_kernel_size=None):
         groups = self.divide_data_into_temporal_groups(prim_coil, ext_coils)
-
         H = self.get_H(groups)
 
-        H, H_range = self.get_clustered_H(H,prim_coil, ext_coils)
+        correlation_range = self.cluster(H)
+        width = prim_coil.shape[1] // self.W
+        correlation_range = [[i*width, j*width] for i, j in correlation_range]
 
-        self.model = H, np.array(H_range)
+        groups = self.divide_data_into_temporal_groups(prim_coil, ext_coils, correlation_range)
 
-        print(f"get {len(H_range)} groups.")
+        if new_kernel_size:
+            self.kernel_size = new_kernel_size
+        H = self.get_H(groups)
+
+        self.model = H, np.array(correlation_range)
 
         print(f"get {len(correlation_range)} groups.")
 
