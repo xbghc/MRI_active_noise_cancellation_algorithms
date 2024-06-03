@@ -10,20 +10,23 @@ class EDITER:
         return h
 
     def cluster(self, H, threshold=0.5):
-        # normalize
-        H = H / np.linalg.norm(H, axis=0)
+        H_normalized = np.zeros_like(H)
+        for clin in range(H.shape[1]):
+            H_normalized[:, clin] = H[:, clin] / np.linalg.norm(H[:, clin])
+        H = H_normalized
 
         H_conj_T = H.conj().T
         C = np.dot(H_conj_T, H)
-        C_threshold = (np.abs(C) >= threshold).astype(int)
+        C_threshold = (np.abs(C) > threshold).astype(int)
 
         groups_range = []
-        r = 0
-        while r < self.W:
-            l = r
-            while r < self.W and C_threshold[l, r] == 1:
-                r += 1
-            groups_range.append([l, r])
+        l = 0
+        while l < self.W:
+            r = self.W - 1
+            while r > l and C_threshold[l, r] == 0:
+                r -= 1
+            groups_range.append([l, r + 1])
+            l = r + 1
         return groups_range
 
     def __init__(self, W, kernel_size=(0, 0)):
