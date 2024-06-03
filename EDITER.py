@@ -51,9 +51,9 @@ class EDITER:
 
     def divide_data_into_temporal_groups(self, prim_coil, ext_colils, ranges=None):
         if ranges is None:
-            width = ext_colils.shape[1]
+            width = prim_coil.shape[1]
             if width % self.W != 0:
-                print(f"kx 必须是 W 的整数倍！ kx: {width}, W: {self.W}")
+                print(f"ky 必须是 W 的整数倍！ ky: {width}, W: {self.W}")
                 return
             sub_width = width // self.W
             ranges = [[i * sub_width, (i + 1) * sub_width] for i in range(self.W)]
@@ -71,7 +71,7 @@ class EDITER:
 
     def get_clustered_H(self, H, prim_coil, ext_coils):
         clustered_groups_range = self.cluster(H)
-        width = ext_coils.shape[1] // self.W
+        width = ext_coils.shape[2] // self.W
         clustered_groups_range = [[l * width, r * width] for l, r in clustered_groups_range]
 
         clustered_groups = [[prim_coil[:, i:j], ext_coils[:, :, i:j]] for i, j in clustered_groups_range]
