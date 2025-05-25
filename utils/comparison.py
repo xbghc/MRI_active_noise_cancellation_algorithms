@@ -87,11 +87,11 @@ class Comparison:
 
 
 if __name__ == "__main__":
+    from data.hyc_data_loader import HycDataLoader
     from traditional.editer import EDITER
     from traditional.yanglei import yanglei
-    from utils.mrd import DataLoader
 
-    data_loader = DataLoader("datasets/HYC", set_id=4)
+    data_loader = HycDataLoader("datasets/HYC", set_id=4)
     primary_coil_data, external_coils_data = data_loader.load_data("noise")[0]
 
     editer = EDITER(W=32)

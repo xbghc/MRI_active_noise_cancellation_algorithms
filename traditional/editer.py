@@ -8,7 +8,8 @@ EDITER (External Dynamic Interference Temporal Estimation and Removal) 算法实
 import matplotlib.pyplot as plt
 import numpy as np
 
-from utils.mrd import DataLoader, reconImagesByFFT
+from data.hyc_data_loader import HycDataLoader
+from utils.mrd import reconImagesByFFT
 
 
 class EDITER:
@@ -248,7 +249,7 @@ class EDITER:
 def main():
     """主函数：演示EDITER算法的使用"""
     # 步骤1：加载训练数据（噪声数据）
-    data_loader = DataLoader("datasets/HYC", set_id=4)
+    data_loader = HycDataLoader("datasets/HYC", set_id=4)
     primary_coil_data, external_coils_data = data_loader.load_data("noise")[0]
 
     # 步骤2：创建并训练EDITER模型

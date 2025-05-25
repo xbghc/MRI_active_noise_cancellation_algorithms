@@ -1,158 +1,109 @@
 import logging
-import os
 
 import numpy as np
 
 
-class DataLoader:
-    @staticmethod
-    def parse_mrd(mrd):
-        if not isinstance(mrd, bytes):
-            return None
-        if len(mrd) < 512:
-            return None
+def parse_mrd(mrd):
+    if not isinstance(mrd, bytes):
+        return None
+    if len(mrd) < 512:
+        return None
 
-        samples = int(0).from_bytes(mrd[0:4], byteorder="little", signed=True)
-        views = int(0).from_bytes(mrd[4:8], byteorder="little", signed=True)
-        views2 = int(0).from_bytes(mrd[8:12], byteorder="little", signed=True)
-        slices = int(0).from_bytes(mrd[12:16], byteorder="little", signed=True)
-        # 16-18 Unspecified
-        datatype = int(0).from_bytes(mrd[18:20], byteorder="little", signed=True)
-        # 20-152 Unspecified
-        echoes = int(0).from_bytes(mrd[152:156], byteorder="little", signed=True)
-        experiments = int(0).from_bytes(mrd[156:160], byteorder="little", signed=True)
+    samples = int(0).from_bytes(mrd[0:4], byteorder="little", signed=True)
+    views = int(0).from_bytes(mrd[4:8], byteorder="little", signed=True)
+    views2 = int(0).from_bytes(mrd[8:12], byteorder="little", signed=True)
+    slices = int(0).from_bytes(mrd[12:16], byteorder="little", signed=True)
+    # 16-18 Unspecified
+    datatype = int(0).from_bytes(mrd[18:20], byteorder="little", signed=True)
+    # 20-152 Unspecified
+    echoes = int(0).from_bytes(mrd[152:156], byteorder="little", signed=True)
+    experiments = int(0).from_bytes(mrd[156:160], byteorder="little", signed=True)
 
-        nele = experiments * echoes * slices * views * views2 * samples
+    nele = experiments * echoes * slices * views * views2 * samples
 
-        if datatype & 0xF == 0:
-            dt = "u1"
-            eleSize = 1
-        elif datatype & 0xF == 1:
-            dt = "i1"
-            eleSize = 1
-        elif datatype & 0xF == 2:
-            dt = "i2"
-            eleSize = 2
-        elif datatype & 0xF == 3:
-            dt = "i2"
-            eleSize = 2
-        elif datatype & 0xF == 4:
-            dt = "i4"
-            eleSize = 4
-        elif datatype & 0xF == 5:
-            dt = "f4"
-            eleSize = 4
-        elif datatype & 0xF == 6:
-            dt = "f8"
-            eleSize = 8
+    if datatype & 0xF == 0:
+        dt = "u1"
+        eleSize = 1
+    elif datatype & 0xF == 1:
+        dt = "i1"
+        eleSize = 1
+    elif datatype & 0xF == 2:
+        dt = "i2"
+        eleSize = 2
+    elif datatype & 0xF == 3:
+        dt = "i2"
+        eleSize = 2
+    elif datatype & 0xF == 4:
+        dt = "i4"
+        eleSize = 4
+    elif datatype & 0xF == 5:
+        dt = "f4"
+        eleSize = 4
+    elif datatype & 0xF == 6:
+        dt = "f8"
+        eleSize = 8
+    else:
+        logging.error("Unknown data type in the MRD file!")
+        return None
+    if datatype & 0x10:
+        eleSize *= 2
+
+    #
+    # XXX - The value of NO_AVERAGES in PPR cannot be used to
+    #       calculate the data size.
+    #       Maybe COMPLETED_AVERAGES? ref. p14 of the manual
+    #
+    posPPR = mrd.rfind(b"\x00")
+    if posPPR == -1:
+        logging.error("Corrupted MRD file!")
+        return None
+    posPPR += 1
+    dataSize = posPPR - 512 - 120
+    if dataSize < nele * eleSize:
+        logging.error("Corrupted MRD file!")
+        return None
+
+    ndata = dataSize // (nele * eleSize)
+    data = []
+
+    offset = 512
+    for i in range(ndata):
+        x = np.frombuffer(
+            mrd[offset:],
+            dtype=[("re", "<" + dt), ("im", "<" + dt)]
+            if (datatype & 0x10)
+            else ("<" + dt),
+            count=nele,
+        )
+        if dt in ("f4", "f8"):
+            pass
         else:
-            logging.error("Unknown data type in the MRD file!")
-            return None
+            x = x.astype(np.float32)
+
         if datatype & 0x10:
-            eleSize *= 2
-
-        #
-        # XXX - The value of NO_AVERAGES in PPR cannot be used to
-        #       calculate the data size.
-        #       Maybe COMPLETED_AVERAGES? ref. p14 of the manual
-        #
-        posPPR = mrd.rfind(b"\x00")
-        if posPPR == -1:
-            logging.error("Corrupted MRD file!")
-            return None
-        posPPR += 1
-        dataSize = posPPR - 512 - 120
-        if dataSize < nele * eleSize:
-            logging.error("Corrupted MRD file!")
-            return None
-
-        ndata = dataSize // (nele * eleSize)
-        data = []
-
-        offset = 512
-        for i in range(ndata):
-            x = np.frombuffer(
-                mrd[offset:],
-                dtype=[("re", "<" + dt), ("im", "<" + dt)]
-                if (datatype & 0x10)
-                else ("<" + dt),
-                count=nele,
-            )
-            if dt in ("f4", "f8"):
-                pass
+            if dt in ("f8",):
+                x = x.view(np.complex128)
             else:
-                x = x.astype(np.float32)
+                x = x.view(np.complex64)
 
-            if datatype & 0x10:
-                if dt in ("f8",):
-                    x = x.view(np.complex128)
-                else:
-                    x = x.view(np.complex64)
+        x = x.reshape((experiments, echoes, slices, views, views2, samples))
 
-            x = x.reshape((experiments, echoes, slices, views, views2, samples))
+        offset += nele * eleSize
 
-            offset += nele * eleSize
+        data.append(x)
 
-            data.append(x)
+    if offset != posPPR - 120:
+        logging.warning("Corrupted MRD file!")
 
-        if offset != posPPR - 120:
-            logging.warning("Corrupted MRD file!")
+    output = {}
+    output["description"] = mrd[256:512].decode("cp437", errors="ignore").rstrip("\0")
+    output["data"] = data
+    output["sampleInfoFilePath"] = (
+        mrd[(posPPR - 120) : posPPR].decode("cp437", errors="ignore").rstrip("\0")
+    )
+    # output['pulseq'] = SmisPulseq(mrd[posPPR:])
 
-        output = {}
-        output["description"] = (
-            mrd[256:512].decode("cp437", errors="ignore").rstrip("\0")
-        )
-        output["data"] = data
-        output["sampleInfoFilePath"] = (
-            mrd[(posPPR - 120) : posPPR].decode("cp437", errors="ignore").rstrip("\0")
-        )
-        # output['pulseq'] = SmisPulseq(mrd[posPPR:])
-
-        return output
-
-    def __init__(self, root, set_id=1):
-        if not os.path.exists(root):
-            logging.error("The root path does not exist!")
-            return
-        if not os.path.exists(os.path.join(root, "set {}".format(set_id))):
-            logging.error("The set path does not exist!")
-            return
-        self.root = root
-        self.set_id = set_id
-
-    def load_data(self, data_type, exp_id=1):
-        path = os.path.join(
-            self.root, f"set {self.set_id}", f"{data_type} data", f"exp{exp_id}"
-        )  # set 1，exp1注意空格
-        if not os.path.exists(path):
-            logging.error("The experiment path does not exist!")
-            return None
-
-        with open(os.path.join(path, f"{data_type}1.mrd"), "rb") as f:
-            prim_mrd_data = self.parse_mrd(f.read())["data"][0]
-
-        ext_mrds_data = []
-        i = 2
-        while True:
-            data_path = os.path.join(path, f"{data_type}{i}.mrd")
-            if not os.path.exists(data_path):
-                break
-            with open(data_path, "rb") as f:
-                ext_mrds_data.append(self.parse_mrd(f.read())["data"][0])
-            i += 1
-
-        # reshape
-        experiments, echoes, slices, views, views2, samples = prim_mrd_data.shape
-        return [
-            [
-                prim_mrd_data[0, 0, 0, :, i, :],
-                np.array(ext_mrds_data)[:, 0, 0, 0, :, i, :],
-            ]
-            for i in range(views2)
-        ]
-
-    def set_set_id(self, set_id):
-        self.set_id = set_id
+    return output
 
 
 def reconImagesByFFT(kdata, size):
