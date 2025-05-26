@@ -8,6 +8,7 @@ EDITER (External Dynamic Interference Temporal Estimation and Removal) 算法实
 import matplotlib.pyplot as plt
 import numpy as np
 
+# 修改导入路径以适应新的包结构
 from data.hyc_data_loader import HycDataLoader
 from utils.mrd import reconImagesByFFT
 
@@ -201,96 +202,90 @@ class EDITER:
 
     def cancel_noise(self, primary_coil, external_coils):
         """
-        使用训练好的模型消除噪声
-        根据外部线圈数据预测并消除主线圈中的噪声
+        使用训练好的模型进行噪声消除
+        应用学习到的传递函数来预测和消除噪声
         """
+        if self.model is None:
+            raise ValueError("模型尚未训练，请先调用train()方法")
+
+        H, ranges = self.model
+
         # 数据转置（如果需要）
         if self.data_transpose:
             primary_coil, external_coils = self.transpose_data(
                 primary_coil, external_coils
             )
 
-        # 获取训练好的模型参数
-        H, correlation_ranges = self.model
-
-        # 按照训练时的分组方式分组数据
+        # 按照训练时的分组方式分割数据
         data_groups = self._divide_data_into_temporal_groups(
-            primary_coil, external_coils, correlation_ranges
+            primary_coil, external_coils, ranges.tolist()
         )
 
-        # 对每个组进行噪声消除
-        denoised_segments = []
-        for group_idx, (prim_segment, ext_segment) in enumerate(data_groups):
-            # 应用填充
-            padded_external = self._apply_padding(ext_segment)
-
+        # 对每个数据组应用噪声消除
+        cleaned_segments = []
+        for idx, (primary_segment, external_segment) in enumerate(data_groups):
+            # 对外部线圈数据应用填充
+            padded_external = self._apply_padding(external_segment)
             # 生成干扰矩阵
             interference_matrix = self._create_interference_matrix(padded_external)
+            # 使用对应的传递函数预测噪声
+            predicted_noise = np.dot(interference_matrix, H[:, idx])
+            # 从主线圈数据中减去预测的噪声
+            cleaned_segment = primary_segment.flatten() - predicted_noise
+            cleaned_segments.append(cleaned_segment.reshape(primary_segment.shape))
 
-            # 使用传递函数预测噪声
-            kx, ky = prim_segment.shape
-            predicted_noise_flat = np.dot(interference_matrix, H[:, group_idx])
-            predicted_noise = predicted_noise_flat.reshape(kx, ky)
+        # 重新组合清理后的数据段
+        cleaned_primary = np.concatenate(cleaned_segments, axis=1)
 
-            # 从原始信号中减去预测的噪声
-            denoised_segment = prim_segment - predicted_noise
-            denoised_segments.append(denoised_segment)
-
-        # 合并所有去噪段
-        result = np.hstack(denoised_segments)
-
-        # 如果之前进行了转置，则转置回来
+        # 如果之前进行了转置，需要转置回来
         if self.data_transpose:
-            result = result.T
+            cleaned_primary = cleaned_primary.T
 
-        return result
+        return cleaned_primary
 
 
 def main():
-    """主函数：演示EDITER算法的使用"""
-    # 步骤1：加载训练数据（噪声数据）
-    data_loader = HycDataLoader("datasets/HYC", set_id=4)
-    primary_coil_data, external_coils_data = data_loader.load_data("noise")[0]
+    """主函数，演示EDITER算法的使用"""
+    # 加载数据
+    loader = HycDataLoader()
+    primary_coil, external_coils = loader.load_data()
 
-    # 步骤2：创建并训练EDITER模型
-    editer = EDITER(W=32)  # 设置时间分组数量为32
-    editer.train(primary_coil_data, external_coils_data)
+    # 创建EDITER实例
+    editer = EDITER(W=8, kernel_size=(1, 1), data_transpose=True)
 
-    # 步骤3：加载测试数据（扫描数据）
-    image_index = 5
-    test_primary, test_external = data_loader.load_data("scan")[image_index]
+    # 训练模型
+    print("开始训练EDITER模型...")
+    editer.train(primary_coil, external_coils)
 
-    # 步骤4：进行噪声消除
-    denoised_data = editer.cancel_noise(test_primary, test_external)
+    # 应用噪声消除
+    print("应用噪声消除...")
+    cleaned_data = editer.cancel_noise(primary_coil, external_coils)
 
-    # 步骤5：重建图像并显示结果
-    x, y = test_primary.shape
+    # 可视化结果
+    plt.figure(figsize=(15, 5))
 
-    # 重建含噪声图像
-    noisy_image = reconImagesByFFT(test_primary.reshape(1, 1, 1, x, 1, y), 256)[0]
-
-    # 重建去噪图像
-    denoised_image = reconImagesByFFT(denoised_data.reshape(1, 1, 1, x, 1, y), 256)[0]
-
-    # 显示对比结果
-    plt.figure(figsize=(12, 5))
-
-    # 显示原始含噪声图像
-    plt.subplot(1, 2, 1)
-    plt.imshow(noisy_image, cmap="gray")
-    plt.title("含噪声图像")
+    plt.subplot(1, 3, 1)
+    plt.imshow(np.abs(reconImagesByFFT(primary_coil)), cmap="gray")
+    plt.title("原始图像")
     plt.axis("off")
 
-    # 显示去噪后图像
-    plt.subplot(1, 2, 2)
-    plt.imshow(denoised_image, cmap="gray")
-    plt.title("去噪后图像")
+    plt.subplot(1, 3, 2)
+    plt.imshow(np.abs(reconImagesByFFT(cleaned_data)), cmap="gray")
+    plt.title("EDITER处理后")
+    plt.axis("off")
+
+    plt.subplot(1, 3, 3)
+    difference = np.abs(reconImagesByFFT(primary_coil)) - np.abs(
+        reconImagesByFFT(cleaned_data)
+    )
+    plt.imshow(difference, cmap="hot")
+    plt.title("差异图像")
     plt.axis("off")
 
     plt.tight_layout()
     plt.show()
 
-    print("处理完成！")
+    print("EDITER算法演示完成")
 
 
 if __name__ == "__main__":

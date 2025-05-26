@@ -1,9 +1,26 @@
+"""
+Yang Lei算法实现
+
+用于MRI主动噪声消除的Yang Lei算法
+"""
+
 import logging
 
 import numpy as np
 
 
 def _yanglei(kdatas, nbin=8, v=0):
+    """
+    Yang Lei算法的内部实现
+
+    Args:
+        kdatas: k空间数据列表，第一个为主线圈，其余为外部线圈
+        nbin: 时间分组数量
+        v: 视图索引
+
+    Returns:
+        处理后的主线圈k空间数据
+    """
     kdata_obj = kdatas[0]
     kdata_nos = [_ for _ in kdatas[1:] if _ is not None]
 
@@ -60,6 +77,18 @@ def _yanglei(kdatas, nbin=8, v=0):
 
 
 def yanglei(prim_coil, ext_coils, nbin=8, v=0):
+    """
+    Yang Lei算法的公共接口
+
+    Args:
+        prim_coil: 主线圈数据，形状为 (views, samples)
+        ext_coils: 外部线圈数据，形状为 (n_coils, views, samples)
+        nbin: 时间分组数量
+        v: 视图索引
+
+    Returns:
+        处理后的主线圈数据，形状为 (views, samples)
+    """
     views, samples = prim_coil.shape
     prim_coil = prim_coil.reshape(1, 1, 1, views, 1, samples)
     ext_coils = ext_coils.reshape(-1, 1, 1, 1, views, 1, samples)
