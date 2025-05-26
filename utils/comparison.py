@@ -87,19 +87,37 @@ class Comparison:
 
 
 if __name__ == "__main__":
-    from data.hyc_data_loader import HycDataLoader
-    from traditional.editer import EDITER
-    from traditional.yanglei import yanglei
+    import os
+    import sys
 
-    data_loader = HycDataLoader("datasets/HYC", set_id=4)
-    primary_coil_data, external_coils_data = data_loader.load_data("noise")[0]
+    # 添加项目根目录到Python路径
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    from data.hyc_data_loader import HycDataLoader
+    from models.traditional.editer import EDITER
+    from models.traditional.yanglei import yanglei
+
+    # 加载噪声数据用于训练
+    noise_loader = HycDataLoader("datasets/HYC", set_id=4, data_type="noise")
+    primary_train, external_train = noise_loader[
+        0
+    ]  # 第一个数据（第一个实验的第一个views2）
+    # primary_train 形状: (views, samples)
+    # external_train 形状: (n_coils, views, samples)
 
     editer = EDITER(W=32)
-    editer.train(primary_coil_data, external_coils_data)
+    editer.train(primary_train, external_train)
+
+    # 加载扫描数据用于测试
+    scan_loader = HycDataLoader("datasets/HYC", set_id=4, data_type="scan")
 
     comparison = Comparison()
-    for prim, ext in data_loader.load_data("scan")[5:9]:
+    # 添加测试数据（使用前4个数据）
+    for i in range(min(4, len(scan_loader))):
+        prim, ext = scan_loader[i]
+        # prim 形状: (views, samples), ext 形状: (n_coils, views, samples)
         comparison.add_data(prim, ext)
+
     comparison.add_algorithm(editer.cancel_noise, "EDITER")
     comparison.add_algorithm(yanglei, "yanglei")
 
