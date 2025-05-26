@@ -5,12 +5,9 @@ EDITER (External Dynamic Interference Temporal Estimation and Removal) 算法实
 来估计和消除主线圈中的噪声干扰。
 """
 
-import matplotlib.pyplot as plt
 import numpy as np
 
 # 修改导入路径以适应新的包结构
-from data.hyc_data_loader import HycDataLoader
-from utils.mrd import reconImagesByFFT
 
 
 class EDITER:
@@ -202,11 +199,11 @@ class EDITER:
 
     def cancel_noise(self, primary_coil, external_coils):
         """
-        使用训练好的模型进行噪声消除
+        如果模型未训练，则先训练模型
         应用学习到的传递函数来预测和消除噪声
         """
         if self.model is None:
-            raise ValueError("模型尚未训练，请先调用train()方法")
+            self.train(primary_coil, external_coils)
 
         H, ranges = self.model
 
@@ -244,49 +241,5 @@ class EDITER:
         return cleaned_primary
 
 
-def main():
-    """主函数，演示EDITER算法的使用"""
-    # 加载数据
-    loader = HycDataLoader()
-    primary_coil, external_coils = loader.load_data()
-
-    # 创建EDITER实例
-    editer = EDITER(W=8, kernel_size=(1, 1), data_transpose=True)
-
-    # 训练模型
-    print("开始训练EDITER模型...")
-    editer.train(primary_coil, external_coils)
-
-    # 应用噪声消除
-    print("应用噪声消除...")
-    cleaned_data = editer.cancel_noise(primary_coil, external_coils)
-
-    # 可视化结果
-    plt.figure(figsize=(15, 5))
-
-    plt.subplot(1, 3, 1)
-    plt.imshow(np.abs(reconImagesByFFT(primary_coil)), cmap="gray")
-    plt.title("原始图像")
-    plt.axis("off")
-
-    plt.subplot(1, 3, 2)
-    plt.imshow(np.abs(reconImagesByFFT(cleaned_data)), cmap="gray")
-    plt.title("EDITER处理后")
-    plt.axis("off")
-
-    plt.subplot(1, 3, 3)
-    difference = np.abs(reconImagesByFFT(primary_coil)) - np.abs(
-        reconImagesByFFT(cleaned_data)
-    )
-    plt.imshow(difference, cmap="hot")
-    plt.title("差异图像")
-    plt.axis("off")
-
-    plt.tight_layout()
-    plt.show()
-
-    print("EDITER算法演示完成")
-
-
 if __name__ == "__main__":
-    main()
+    pass
