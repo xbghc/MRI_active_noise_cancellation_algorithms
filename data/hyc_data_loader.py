@@ -8,19 +8,16 @@ from utils.mrd import parse_mrd
 
 class HycDataLoader:
     """
-    HYC数据加载器
-
-    支持通过索引访问数据，数据格式为四维数组：exp * views2 * views * samples
+    支持3维和1维数据加载
     """
 
-    def __init__(self, root, set_id, data_type):
+    def __init__(self, root, set_id, data_type, flatten=False):
         """
-        初始化数据加载器
-
         Args:
             root: 数据根目录路径
             set_id: 数据集ID
             data_type: 数据类型，只能为"noise"或"scan"
+            flatten: 是否展平数据，如果为True，则返回1维数据；如果为False，则返回3维数据
         """
         # 验证data_type参数
         if data_type not in ["noise", "scan"]:
@@ -36,23 +33,20 @@ class HycDataLoader:
         self.root = root
         self.set_id = set_id
         self.data_type = data_type
+        self.flatten = flatten
 
-        # 加载所有数据并格式化为四维数组
-        self._data = self._load_all_data()
+        self._primary_data, self._external_data = self._load_all_data()
 
     def _load_all_data(self):
         """
-        加载所有实验数据并格式化为四维数组
-
         Returns:
             tuple: (primary_data, external_data)
-                - primary_data: 主线圈数据，形状为 (exp, views2, views, samples)
-                - external_data: 外部线圈数据，形状为 (exp, views2, n_external_coils, views, samples)
+                - primary_data: 主线圈数据，形状为 (exp, views, views2, samples)
+                - external_data: 外部线圈数据，形状为 (exp, n_external_coils, views, views2, samples)
         """
         primary_data_list = []
         external_data_list = []
 
-        # 遍历所有实验
         for exp_id in range(1, 10):  # 最多支持9个实验
             exp_path = self._get_exp_path(exp_id)
             if not os.path.exists(exp_path):
@@ -66,7 +60,7 @@ class HycDataLoader:
         if not primary_data_list:
             raise RuntimeError("未找到有效的实验数据")
 
-        # 转换为numpy数组，形状为 (exp, views2, views, samples)
+        # 转换为numpy数组，形状为 (exp, views, views2, samples)
         primary_data = np.array(primary_data_list)
         external_data = np.array(external_data_list)
 
@@ -121,24 +115,20 @@ class HycDataLoader:
 
         # 重新整理数据格式
         # 原始数据形状: (experiments, echoes, slices, views, views2, samples)
-        # 目标格式: (views2, views, samples) for primary, (views2, n_coils, views, samples) for external
+        # 目标格式: (views, views2, samples) for primary, (n_coils, views, views2, samples) for external
 
         experiments, echoes, slices, views, views2, samples = primary_mrd_data.shape
 
-        # 提取主线圈数据: (views2, views, samples)
-        primary_data = primary_mrd_data[0, 0, 0, :, :, :].transpose(
-            1, 0, 2
-        )  # (views2, views, samples)
+        # 提取主线圈数据: (views, views2, samples)
+        primary_data = primary_mrd_data[0, 0, 0, :, :, :]  # (views, views2, samples)
 
-        # 提取外部线圈数据: (views2, n_coils, views, samples)
+        # 提取外部线圈数据: (n_coils, views, views2, samples)
         external_data = np.array(
             [
-                ext_data[0, 0, 0, :, :, :].transpose(
-                    1, 0, 2
-                )  # (views2, views, samples)
+                ext_data[0, 0, 0, :, :, :]  # (views, views2, samples)
                 for ext_data in external_data_list
             ]
-        ).transpose(1, 0, 2, 3)  # (views2, n_coils, views, samples)
+        )  # (n_coils, views, views2, samples)
 
         return primary_data, external_data
 
@@ -149,31 +139,48 @@ class HycDataLoader:
         )
 
     def __len__(self):
-        """返回数据集中的总数据量（views2 * exp）"""
-        primary_data, _ = self._data
-        n_exp, views2 = primary_data.shape[:2]
-        return n_exp * views2
+        if self.flatten:
+            # 展平模式：返回 n_exp * views * views2
+            n_exp, views, views2 = self._primary_data.shape[:3]
+            return n_exp * views * views2
+        else:
+            # 3维模式：返回实验数量
+            return self._primary_data.shape[0]
 
     def __getitem__(self, index):
         """
-        通过索引获取数据
-
-        Args:
-            index: 线性索引，范围为 0 到 (views2 * exp - 1)
-
         Returns:
             tuple: (primary_data, external_data)
-                - primary_data: 主线圈数据，形状为 (views, samples)
-                - external_data: 外部线圈数据，形状为 (n_coils, views, samples)
+                - 如果 flatten=False:
+                    - primary_data: 主线圈数据，形状为 (views, views2, samples)
+                    - external_data: 外部线圈数据，形状为 (n_coils, views, views2, samples)
+                - 如果 flatten=True:
+                    - primary_data: 主线圈数据，形状为 (samples,)
+                    - external_data: 外部线圈数据，形状为 (n_coils, samples)
         """
-        primary_data, external_data = self._data
-        n_exp, views2 = primary_data.shape[:2]
 
-        # 将线性索引转换为 (exp_idx, views2_idx)
-        exp_idx = index // views2
-        views2_idx = index % views2
+        if self.flatten:
+            # 展平模式：将线性索引转换为 (exp_idx, view_idx, views2_idx)
+            n_exp, views, views2, samples = self._primary_data.shape
 
-        return primary_data[exp_idx, views2_idx], external_data[exp_idx, views2_idx]
+            # 计算三维索引
+            exp_idx = index // (views * views2)
+            remaining = index % (views * views2)
+            view_idx = remaining // views2
+            views2_idx = remaining % views2
+
+            # 返回单行数据
+            prim_row = self._primary_data[
+                exp_idx, view_idx, views2_idx, :
+            ]  # (samples,)
+            ext_row = self._external_data[
+                exp_idx, :, view_idx, views2_idx, :
+            ]  # (n_coils, samples)
+
+            return prim_row, ext_row
+        else:
+            # 3维模式：返回整个实验的数据
+            return self._primary_data[index], self._external_data[index]
 
     def get_data_info(self):
         """
@@ -182,15 +189,35 @@ class HycDataLoader:
         Returns:
             dict: 包含数据集基本信息的字典
         """
-        primary_data, external_data = self._data
-        return {
+        info = {
             "data_type": self.data_type,
             "set_id": self.set_id,
-            "n_experiments": len(primary_data),
-            "n_external_coils": external_data.shape[2] if len(external_data) > 0 else 0,
-            "primary_shape": primary_data.shape,
-            "external_shape": external_data.shape,
-            "views2": primary_data.shape[1] if len(primary_data) > 0 else 0,
-            "views": primary_data.shape[2] if len(primary_data) > 0 else 0,
-            "samples": primary_data.shape[3] if len(primary_data) > 0 else 0,
+            "flatten": self.flatten,
+            "n_experiments": len(self._primary_data),
+            "n_external_coils": self._external_data.shape[1]
+            if len(self._external_data) > 0
+            else 0,
+            "primary_shape": self._primary_data.shape,
+            "external_shape": self._external_data.shape,
+            "views": self._primary_data.shape[1] if len(self._primary_data) > 0 else 0,
+            "views2": self._primary_data.shape[2] if len(self._primary_data) > 0 else 0,
+            "samples": self._primary_data.shape[3]
+            if len(self._primary_data) > 0
+            else 0,
         }
+
+        if self.flatten:
+            info["total_rows"] = len(self)
+            info["output_primary_shape"] = f"({info['samples']},)"
+            info["output_external_shape"] = (
+                f"({info['n_external_coils']}, {info['samples']})"
+            )
+        else:
+            info["output_primary_shape"] = (
+                f"({info['views']}, {info['views2']}, {info['samples']})"
+            )
+            info["output_external_shape"] = (
+                f"({info['n_external_coils']}, {info['views']}, {info['views2']}, {info['samples']})"
+            )
+
+        return info
