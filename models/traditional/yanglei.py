@@ -1,96 +1,64 @@
-"""
-Yang Lei算法实现
-
-用于MRI主动噪声消除的Yang Lei算法
-"""
-
-import logging
-
 import numpy as np
 
 
-def _yanglei(kdatas, nbin=8, v=0):
+class Yanglei:
     """
-    Yang Lei算法的内部实现
-
-    Args:
-        kdatas: k空间数据列表，第一个为主线圈，其余为外部线圈
-        nbin: 时间分组数量
-        v: 视图索引
-
-    Returns:
-        处理后的主线圈k空间数据
+    yanglei算法本是用于实时降噪，不需要根据空采数据进行训练。这里提供了使用空采数据训练的接口
+    - 有一定的性能损失，fit和denoise会分别将数据拆分为多个bin
+    - 原方法傅里叶变换后没有调用fftshift，这里会调用
     """
-    kdata_obj = kdatas[0]
-    kdata_nos = [_ for _ in kdatas[1:] if _ is not None]
 
-    if len(kdata_nos) <= 0:
-        return kdata_obj
+    def __init__(self, nbin=8, v=0):
+        """
+        Args:
+            nbin: 频率分组的数量
+            v: 默认为0，本意是取最边缘的数据，用于近似空采数据
+        """
+        self.nbin = nbin
+        self.v = v
 
-    if (not isinstance(nbin, int)) or nbin <= 0:
-        logging.warning("The nbin(=%d) must be an integer greater than 0." % (nbin,))
-        return kdata_obj
+        self.c = None  # 系数矩阵
 
-    npb = kdata_nos[0].shape[5] // nbin
+    def fit(self, prim_coil, ext_coils):
+        """
+        支持各种维度的数据，计算方法是一样的
+        """
+        n_nos = len(ext_coils)
 
-    if (nbin * npb) != kdata_nos[0].shape[5]:
-        logging.warning(
-            "The nbin(=%d) must be divisible by number of samples(=%d)."
-            % (nbin, kdata_nos[0].shape[5])
-        )
-    else:
-        idata_obj = np.fft.fft(kdata_obj)
-        idata_nos = np.array([np.fft.fft(kdata_nos[i]) for i in range(len(kdata_nos))])
+        idata_obj = np.fft.fftshift(np.fft.fft(prim_coil))
+        idata_nos = np.fft.fftshift(np.fft.fft(ext_coils))
 
-        X = idata_nos[:, 0, 0, 0, v, 0, :]
-        y = idata_obj[0, 0, 0, v, 0, :]
-        c = np.zeros((idata_nos.shape[0], nbin), dtype=y.dtype)
+        self.c = []
+        obj_bins = np.split(idata_obj, self.nbin, axis=-1)
+        nos_bins = np.split(idata_nos, self.nbin, axis=-1)
 
-        for i in range(c.shape[1]):
-            rng = range(i * npb, (i + 1) * npb)
-            _ = np.linalg.lstsq(X[:, rng].T, y[rng], rcond=None)
-            c[:, i] = _[0]
+        for i in range(self.nbin):
+            X = nos_bins[i].swapaxes(0, -1).reshape(-1, n_nos)
+            y = obj_bins[i].flatten()
+            self.c.append(np.linalg.lstsq(X, y, rcond=None))
 
-        idata_obj -= np.reshape(
-            np.sum(
-                c[:, None, None, None, None, None, :, None]
-                * idata_nos.reshape(
-                    (
-                        idata_nos.shape[0],
-                        idata_nos.shape[1],
-                        idata_nos.shape[2],
-                        idata_nos.shape[3],
-                        idata_nos.shape[4],
-                        idata_nos.shape[5],
-                        c.shape[1],
-                        -1,
-                    )
-                ),
-                axis=0,
-            ),
-            idata_obj.shape,
-        )
+    def predict(self, prim_coil, ext_coils, reTrain):
+        if reTrain or self.c is None:
+            self.fit(prim_coil, ext_coils)
 
-        kdata_obj = np.fft.ifft(idata_obj)
+        idata_obj = np.fft.fftshift(np.fft.fft(prim_coil))
+        idata_nos = np.fft.fftshift(np.fft.fft(ext_coils))
 
-    return kdata_obj
+        nos_bins = np.split(idata_nos, self.nbin, axis=-1)
+        obj_bins = np.split(idata_obj, self.nbin, axis=-1)
+        # 预测结果
+        result = np.zeros_like(idata_obj)
+        for i in range(self.nbin):
+            X = nos_bins[i].swapaxes(0, -1).reshape(-1, len(ext_coils))
+            predicted_y = X @ self.c[i][0]
+            result_bin = predicted_y.reshape(obj_bins[i].shape)
+            result_bin = result_bin.reshape(nos_bins[i].shape[1:])
+            result_bin_start = i * (result.shape[-1] // self.nbin)
+            result_bin_end = (i + 1) * (result.shape[-1] // self.nbin)
+            result[..., result_bin_start:result_bin_end] = result_bin
 
+        # 转回时域
+        return np.fft.ifft(np.fft.ifftshift(result))
 
-def yanglei(prim_coil, ext_coils, nbin=8, v=0):
-    """
-    Yang Lei算法的公共接口
-
-    Args:
-        prim_coil: 主线圈数据，形状为 (views, samples)
-        ext_coils: 外部线圈数据，形状为 (n_coils, views, samples)
-        nbin: 时间分组数量
-        v: 视图索引
-
-    Returns:
-        处理后的主线圈数据，形状为 (views, samples)
-    """
-    views, samples = prim_coil.shape
-    prim_coil = prim_coil.reshape(1, 1, 1, views, 1, samples)
-    ext_coils = ext_coils.reshape(-1, 1, 1, 1, views, 1, samples)
-    kdatas = [prim_coil, *ext_coils]
-    return _yanglei(kdatas, nbin, v).reshape(views, samples)
+    def denoise(self, prim_coil, ext_coils, reTrain):
+        return prim_coil - self.predict(prim_coil, ext_coils, reTrain)

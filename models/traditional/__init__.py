@@ -5,6 +5,6 @@
 """
 
 from .editer import EDITER
-from .yanglei import yanglei
+from .yanglei import Yanglei
 
-__all__ = ["EDITER", "yanglei"]
+__all__ = ["EDITER", "Yanglei"]

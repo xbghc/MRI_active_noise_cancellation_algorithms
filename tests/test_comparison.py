@@ -13,8 +13,16 @@ if project_root not in sys.path:
 
 from data.hyc_data_loader import HycDataLoader
 from models.traditional.editer import EDITER
-from models.traditional.yanglei import yanglei
+from models.traditional.yanglei import Yanglei
 from utils.comparison import Comparison
+
+
+def yanglei_adapter(prim_coil, ext_coils, nbin=8, v=0):
+    """
+    Yanglei类的适配器函数，保持与原yanglei函数相同的接口
+    """
+    yanglei_instance = Yanglei(nbin=nbin, v=v)
+    return yanglei_instance.denoise(prim_coil, ext_coils, reTrain=True)
 
 
 def test_comparison():
@@ -51,7 +59,7 @@ def test_comparison():
             comparison.add_data(prim, ext)
 
         comparison.add_algorithm(editer.cancel_noise, "EDITER")
-        comparison.add_algorithm(yanglei, "yanglei")
+        comparison.add_algorithm(yanglei_adapter, "Yanglei")
 
         print("比较测试设置完成")
         print(f"数据集数量: {len(comparison._datas)}")
