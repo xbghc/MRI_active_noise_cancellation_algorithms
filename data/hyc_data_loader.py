@@ -35,7 +35,7 @@ class HycDataLoader:
         self.data_type = data_type
         self.flatten = flatten
 
-        self._primary_data, self._external_data = self._load_all_data()
+        self.primary_data, self.external_data = self._load_all_data()
 
     def _load_all_data(self):
         """
@@ -141,11 +141,11 @@ class HycDataLoader:
     def __len__(self):
         if self.flatten:
             # 展平模式：返回 n_exp * views * views2
-            n_exp, views, views2 = self._primary_data.shape[:3]
+            n_exp, views, views2 = self.primary_data.shape[:3]
             return n_exp * views * views2
         else:
             # 3维模式：返回实验数量
-            return self._primary_data.shape[0]
+            return self.primary_data.shape[0]
 
     def __getitem__(self, index):
         """
@@ -161,7 +161,7 @@ class HycDataLoader:
 
         if self.flatten:
             # 展平模式：将线性索引转换为 (exp_idx, view_idx, views2_idx)
-            n_exp, views, views2, samples = self._primary_data.shape
+            n_exp, views, views2, samples = self.primary_data.shape
 
             # 计算三维索引
             exp_idx = index // (views * views2)
@@ -170,17 +170,15 @@ class HycDataLoader:
             views2_idx = remaining % views2
 
             # 返回单行数据
-            prim_row = self._primary_data[
-                exp_idx, view_idx, views2_idx, :
-            ]  # (samples,)
-            ext_row = self._external_data[
+            prim_row = self.primary_data[exp_idx, view_idx, views2_idx, :]  # (samples,)
+            ext_row = self.external_data[
                 exp_idx, :, view_idx, views2_idx, :
             ]  # (n_coils, samples)
 
             return prim_row, ext_row
         else:
             # 3维模式：返回整个实验的数据
-            return self._primary_data[index], self._external_data[index]
+            return self.primary_data[index], self.external_data[index]
 
     def get_data_info(self):
         """
@@ -193,17 +191,15 @@ class HycDataLoader:
             "data_type": self.data_type,
             "set_id": self.set_id,
             "flatten": self.flatten,
-            "n_experiments": len(self._primary_data),
-            "n_external_coils": self._external_data.shape[1]
-            if len(self._external_data) > 0
+            "n_experiments": len(self.primary_data),
+            "n_external_coils": self.external_data.shape[1]
+            if len(self.external_data) > 0
             else 0,
-            "primary_shape": self._primary_data.shape,
-            "external_shape": self._external_data.shape,
-            "views": self._primary_data.shape[1] if len(self._primary_data) > 0 else 0,
-            "views2": self._primary_data.shape[2] if len(self._primary_data) > 0 else 0,
-            "samples": self._primary_data.shape[3]
-            if len(self._primary_data) > 0
-            else 0,
+            "primary_shape": self.primary_data.shape,
+            "external_shape": self.external_data.shape,
+            "views": self.primary_data.shape[1] if len(self.primary_data) > 0 else 0,
+            "views2": self.primary_data.shape[2] if len(self.primary_data) > 0 else 0,
+            "samples": self.primary_data.shape[3] if len(self.primary_data) > 0 else 0,
         }
 
         if self.flatten:
