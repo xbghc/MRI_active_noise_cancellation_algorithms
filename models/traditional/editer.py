@@ -21,12 +21,16 @@ class EDITER:
         self.data_transpose = data_transpose  # 是否需要转置数据
 
     @staticmethod
-    def calculate_transfer_function(interference_matrix, primary_coil):
+    def calculate_transfer_function(convolved_nos, obj):
         """
-        计算传递函数h
-        使用最小二乘法求解线性方程 E*h = primary_coil
+        Args:
+            convolved_nos: 卷积后的噪声数据
+            obj: 目标数据
+
+        Returns:
+            h: 传递函数
         """
-        h = np.linalg.lstsq(interference_matrix, primary_coil.flatten(), rcond=None)[0]
+        h = np.linalg.lstsq(convolved_nos, obj.flatten(), rcond=None)[0]
         return h
 
     @staticmethod
@@ -137,7 +141,7 @@ class EDITER:
         # 将所有传递函数组合成矩阵
         return np.array(transfer_functions).reshape(len(data_groups), -1).T
 
-    def train(self, primary_coil, external_coils, new_kernel_size=None):
+    def fit(self, primary_coil, external_coils, new_kernel_size=None):
         """
         训练EDITER模型
         通过分析主线圈和外部线圈的关系，学习传递函数
@@ -197,13 +201,13 @@ class EDITER:
             ]
         )
 
-    def cancel_noise(self, primary_coil, external_coils):
+    def denoise(self, primary_coil, external_coils, reTrain=False):
         """
         如果模型未训练，则先训练模型
         应用学习到的传递函数来预测和消除噪声
         """
-        if self.model is None:
-            self.train(primary_coil, external_coils)
+        if self.model is None or reTrain:
+            self.fit(primary_coil, external_coils)
 
         H, ranges = self.model
 
@@ -239,7 +243,3 @@ class EDITER:
             cleaned_primary = cleaned_primary.T
 
         return cleaned_primary
-
-
-if __name__ == "__main__":
-    pass

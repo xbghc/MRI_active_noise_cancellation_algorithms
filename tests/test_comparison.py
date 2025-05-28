@@ -41,7 +41,7 @@ def test_comparison():
         external_train = external_train_exp[:, :, 0, :]  # (n_coils, views, samples)
 
         editer = EDITER(W=32)
-        editer.train(primary_train, external_train)
+        editer.fit(primary_train, external_train)
 
         # 加载扫描数据用于测试
         scan_loader = HycDataLoader("datasets/HYC", set_id=4, data_type="scan")
@@ -58,7 +58,7 @@ def test_comparison():
 
             comparison.add_data(prim, ext)
 
-        comparison.add_algorithm(editer.cancel_noise, "EDITER")
+        comparison.add_algorithm(editer.denoise, "EDITER")
         comparison.add_algorithm(yanglei_adapter, "Yanglei")
 
         print("比较测试设置完成")

@@ -38,9 +38,9 @@ def test_mat_processing():
         print(f"外部线圈数据形状: {ext.shape}")
 
         editer = EDITER(W=prim.shape[1])
-        editer.train(prim, ext, new_kernel_size=(7, 0))
+        editer.fit(prim, ext, new_kernel_size=(7, 0))
 
-        denoise_data = editer.cancel_noise(prim, ext)
+        denoise_data = editer.denoise(prim, ext)
 
         # 检查其他测试文件
         if os.path.exists("./gksp_data.mat") and os.path.exists("./kcor_thresh.mat"):
