@@ -82,14 +82,25 @@ class EDITER:
 
         return groups_range
 
-    def _create_interference_matrix(self, ext_kdata):
+    def _convolve(self, ext_kdata, kernel_size=None):
         """
-        生成干扰卷积矩阵
         将外部线圈数据转换为卷积矩阵形式，用于传递函数计算
+
+        Args:
+            ext_kdata: 外部线圈数据，kdata的形状为(coil, kx, ky)，也就是说有kx个扫描行，每个扫描行有ky个采样点，这里要注意，kx是垂直方向，ky是水平方向
+            kernel_size: 卷积核大小，包含kx和ky两个维度
+
+        Returns:
+            interference_matrix: 干扰矩阵，形状为(n_lines, delta_kx * delta_ky * n_coils)，其中n_lines是采样点的个数
         """
+        if kernel_size is None:
+            kernel_size = self.kernel_size
+
         # 计算卷积核的实际大小
-        delta_kx, delta_ky = [size * 2 + 1 for size in self.kernel_size]
-        kx, ky = ext_kdata[0].shape
+        delta_kx, delta_ky = [size * 2 + 1 for size in kernel_size]
+
+        padded_ext_kdata = self._apply_padding(ext_kdata)
+        kx, ky = padded_ext_kdata[0].shape
 
         lines = []
         # 滑动窗口提取特征
@@ -99,28 +110,26 @@ class EDITER:
                 line = np.concatenate(
                     [
                         coil[i_x : i_x + delta_kx, i_y : i_y + delta_ky].flatten()
-                        for coil in ext_kdata
+                        for coil in padded_ext_kdata
                     ]
                 )
                 lines.append(line)
 
         return np.vstack(lines)
 
-    def _divide_data_into_temporal_groups(self, prim_kdata, ext_kdata, ranges=None):
+    def _split(self, prim_kdata, ext_kdata, ranges=None):
         """
-        将数据按时间分组
-        根据指定的范围或均匀分割将数据分成多个时间组
+        将数据按时间分组，每组包含一个或多个扫描行，在论文中叫temporal group
+        如果提供ranges，则按照ranges分割数据，否则根据设置的参数W均匀分割为W组
         """
         if ranges is None:
-            # 如果没有指定范围，则均匀分割
-            width = prim_kdata.shape[1]
+            width = prim_kdata.shape[1]  # TODO 这里应该按行分，而不是按列分
             sub_width = width // self.W
             ranges = [[i * sub_width, (i + 1) * sub_width] for i in range(self.W)]
 
-        # 按照范围分割数据
         return [
-            (prim_kdata[:, start:end], ext_kdata[:, :, start:end])
-            for start, end in ranges
+            (prim_kdata[:, left:right], ext_kdata[:, :, left:right])
+            for left, right in ranges
         ]
 
     def _calculate_transfer_matrix(self, data_groups):
@@ -129,13 +138,11 @@ class EDITER:
         对每个数据组计算传递函数，组成完整的传递函数矩阵
         """
         transfer_functions = []
-        for kdata_prim, kdata_ext in data_groups:
-            # 对外部线圈数据应用填充
-            padded_external = self._apply_padding(kdata_ext)
+        for prim_kdata, ext_kdata in data_groups:
             # 生成干扰矩阵
-            interference_matrix = self._create_interference_matrix(padded_external)
+            interference_matrix = self._convolve(ext_kdata)
             # 计算传递函数
-            h = self.calculate_transfer_function(interference_matrix, kdata_prim)
+            h = self.calculate_transfer_function(interference_matrix, prim_kdata)
             transfer_functions.append(h)
 
         # 将所有传递函数组合成矩阵
@@ -151,7 +158,8 @@ class EDITER:
             prim_kdata, ext_kdata = self.transpose_data(prim_kdata, ext_kdata)
 
         # 第一步：初始分组和传递函数计算
-        initial_groups = self._divide_data_into_temporal_groups(prim_kdata, ext_kdata)
+        # OPTM: 这里可以每一组计算出来直接放入H矩阵中，而不是统一分组然后统一计算
+        initial_groups = self._split(prim_kdata, ext_kdata)
         H = self._calculate_transfer_matrix(initial_groups)
 
         # 第二步：基于相关性的聚类，优化分组
@@ -162,9 +170,7 @@ class EDITER:
         actual_ranges = [[i * width, j * width] for i, j in correlation_ranges]
 
         # 第三步：使用优化后的分组重新计算传递函数
-        final_groups = self._divide_data_into_temporal_groups(
-            prim_kdata, ext_kdata, actual_ranges
-        )
+        final_groups = self._split(prim_kdata, ext_kdata, actual_ranges)
 
         # 更新卷积核尺寸（如果提供）
         if new_kernel_size is not None:
@@ -212,17 +218,13 @@ class EDITER:
             prim_kdata, ext_kdata = self.transpose_data(prim_kdata, ext_kdata)
 
         # 按照训练时的分组方式分割数据
-        data_groups = self._divide_data_into_temporal_groups(
-            prim_kdata, ext_kdata, ranges.tolist()
-        )
+        data_groups = self._split(prim_kdata, ext_kdata, ranges.tolist())
 
         # 对每个数据组应用噪声消除
         cleaned_segments = []
         for idx, (primary_segment, external_segment) in enumerate(data_groups):
-            # 对外部线圈数据应用填充
-            padded_external = self._apply_padding(external_segment)
             # 生成干扰矩阵
-            interference_matrix = self._create_interference_matrix(padded_external)
+            interference_matrix = self._convolve(external_segment)
             # 使用对应的传递函数预测噪声
             predicted_noise = np.dot(interference_matrix, H[:, idx])
             # 从主线圈数据中减去预测的噪声
