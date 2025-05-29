@@ -16,7 +16,7 @@ class EDITER:
     def __init__(self, W, kernel_size=(0, 0), data_transpose=False):
         """初始化EDITER实例"""
         self.W = W  # 时间分组数量
-        self.kernel_size = kernel_size  # 卷积核大小 (kx, ky)
+        self.kernel_size = kernel_size  # 卷积核大小 (ky, kx)
         self.model = None  # 训练好的模型参数
         self.data_transpose = data_transpose  # 是否需要转置数据
 
@@ -27,7 +27,7 @@ class EDITER:
             prim_samples: 目标数据
 
         Returns:
-            h: 传递函数
+            h: 传递函数，长度为 (2 * dx + 1) * (2 * dy + 1) * n_coils，其中(dy, dx) = kernel_size
         """
         convolved_ext_samples = self._convolve(ext_samples)
         h = np.linalg.lstsq(convolved_ext_samples, prim_samples.flatten(), rcond=None)[
@@ -186,13 +186,13 @@ class EDITER:
         对外部线圈数据应用零填充
         为卷积操作准备边界条件
         """
-        pad_kx, pad_ky = self.kernel_size
+        pad_ky, pad_kx = self.kernel_size
 
         return np.array(
             [
                 np.pad(
                     coil,
-                    ((pad_kx, pad_kx), (pad_ky, pad_ky)),
+                    ((pad_ky, pad_ky), (pad_kx, pad_kx)),
                     mode="constant",
                     constant_values=0,
                 )
