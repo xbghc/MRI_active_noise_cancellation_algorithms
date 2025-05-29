@@ -37,20 +37,19 @@ class EDITER:
 
     def _normalize(self, H):
         """
-        归一化传递函数矩阵
-        对每一列进行L2归一化，避免数值不稳定
+        归一化传递函数矩阵，对每个h进行L2归一化
 
         Args:
             H: 传递函数矩阵，形状为(n_lines, n_coils * (2 * dy + 1) * (2 * dx + 1))
         """
-        H_normalized = np.zeros_like(H)
-        for col_idx in range(H.shape[1]):
-            column_norm = np.linalg.norm(H[:, col_idx])
-            if column_norm > 0:
-                H_normalized[:, col_idx] = H[:, col_idx] / column_norm
+        out = np.zeros_like(H)
+        for i in range(H.shape[0]):
+            normalized_h = np.linalg.norm(H[i, :])
+            if normalized_h > 0:
+                out[i, :] = H[i, :] / normalized_h
             else:
-                H_normalized[:, col_idx] = H[:, col_idx]
-        return H_normalized
+                out[i, :] = H[i, :]
+        return out
 
     def _cluster(self, H, threshold=0.5):
         """
