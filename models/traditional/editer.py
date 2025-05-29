@@ -67,15 +67,16 @@ class EDITER:
         correlation_threshold = (np.abs(correlation_matrix) > threshold).astype(int)
 
         # 基于相关性矩阵确定分组范围
+        # XXX 这部分和论文中不一致，论文中是从末尾开始查找与第1行相关性小于阈值的行，这里会更加符合逻辑
         groups_range = []
         left = 0
         while left < self.W:
-            right = self.W - 1
+            right = left + 1
             # 找到当前组的右边界
-            while right > left and correlation_threshold[left, right] == 0:
-                right -= 1
-            groups_range.append([left, right + 1])
-            left = right + 1
+            while right < self.W and correlation_threshold[left, right] == 0:
+                right += 1
+            groups_range.append([left, right])
+            left = right
 
         return groups_range
 
