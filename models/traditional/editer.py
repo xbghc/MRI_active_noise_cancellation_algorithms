@@ -68,17 +68,17 @@ class EDITER:
 
         # 基于相关性矩阵确定分组范围
         # XXX 这部分和论文中不一致，论文中是从末尾开始查找与第1行相关性小于阈值的行，这里会更加符合逻辑
-        groups_range = []
+        groups_ranges = []
         left = 0
         while left < self.W:
             right = left + 1
             # 找到当前组的右边界
             while right < self.W and correlation_threshold[left, right] == 0:
                 right += 1
-            groups_range.append([left, right])
+            groups_ranges.append([left, right])
             left = right
 
-        return groups_range
+        return groups_ranges
 
     def _convolve(self, ext_kdata, kernel_size=None):
         """
@@ -121,12 +121,12 @@ class EDITER:
         如果提供ranges，则按照ranges分割数据，否则根据设置的参数W均匀分割为W组
         """
         if ranges is None:
-            width = prim_kdata.shape[1]  # TODO 这里应该按行分，而不是按列分
+            width = prim_kdata.shape[0]
             sub_width = width // self.W
             ranges = [[i * sub_width, (i + 1) * sub_width] for i in range(self.W)]
 
         return [
-            (prim_kdata[:, left:right], ext_kdata[:, :, left:right])
+            (prim_kdata[left:right, :], ext_kdata[left:right, :, :])
             for left, right in ranges
         ]
 
@@ -157,7 +157,7 @@ class EDITER:
         correlation_ranges = self._cluster(H)
 
         # 将聚类结果映射到实际数据范围
-        width = prim_kdata.shape[1] // self.W
+        width = prim_kdata.shape[0] // self.W
         actual_ranges = [[i * width, j * width] for i, j in correlation_ranges]
 
         # 第三步：使用优化后的分组重新计算传递函数
