@@ -20,8 +20,7 @@ class EDITER:
         self.model = None  # 训练好的模型参数
         self.data_transpose = data_transpose  # 是否需要转置数据
 
-    @staticmethod
-    def calculate_transfer_function(convolved_ext_samples, prim_samples):
+    def calculate_transfer_function(self, ext_samples, prim_samples):
         """
         Args:
             convolved_ext_samples: 卷积后的外部线圈数据
@@ -30,6 +29,7 @@ class EDITER:
         Returns:
             h: 传递函数
         """
+        convolved_ext_samples = self._convolve(ext_samples)
         h = np.linalg.lstsq(convolved_ext_samples, prim_samples.flatten(), rcond=None)[
             0
         ]
@@ -87,29 +87,29 @@ class EDITER:
         将外部线圈数据转换为卷积矩阵形式，用于传递函数计算
 
         Args:
-            ext_kdata: 外部线圈数据，kdata的形状为(coil, kx, ky)，也就是说有kx个扫描行，每个扫描行有ky个采样点，这里要注意，kx是垂直方向，ky是水平方向
-            kernel_size: 卷积核大小，包含kx和ky两个维度
+            ext_kdata: 外部线圈数据，kdata的形状为(coil, ky, kx)，也就是说有ky个扫描行，每个扫描行有kx个采样点
+            kernel_size: 卷积核大小，包含ky和kx两个维度
 
         Returns:
-            interference_matrix: 干扰矩阵，形状为(n_lines, delta_kx * delta_ky * n_coils)，其中n_lines是采样点的个数
+            interference_matrix: 干扰矩阵，形状为(n_lines, delta_ky * delta_kx * n_coils)，其中n_lines是采样点的个数
         """
         if kernel_size is None:
             kernel_size = self.kernel_size
 
         # 计算卷积核的实际大小
-        delta_kx, delta_ky = [size * 2 + 1 for size in kernel_size]
+        delta_ky, delta_kx = [size * 2 + 1 for size in kernel_size]
 
         padded_ext_kdata = self._apply_padding(ext_kdata)
-        kx, ky = padded_ext_kdata[0].shape
+        ky, kx = padded_ext_kdata[0].shape
 
         lines = []
         # 滑动窗口提取特征
-        for i_x in range(kx - delta_kx + 1):
-            for i_y in range(ky - delta_ky + 1):
+        for i_y in range(ky - delta_ky + 1):
+            for i_x in range(kx - delta_kx + 1):
                 # 提取每个位置的卷积窗口并展平
                 line = np.concatenate(
                     [
-                        coil[i_x : i_x + delta_kx, i_y : i_y + delta_ky].flatten()
+                        coil[i_y : i_y + delta_ky, i_x : i_x + delta_kx].flatten()
                         for coil in padded_ext_kdata
                     ]
                 )
@@ -139,10 +139,7 @@ class EDITER:
         """
         transfer_functions = []
         for prim_kdata, ext_kdata in data_groups:
-            # 生成干扰矩阵
-            interference_matrix = self._convolve(ext_kdata)
-            # 计算传递函数
-            h = self.calculate_transfer_function(interference_matrix, prim_kdata)
+            h = self.calculate_transfer_function(ext_kdata, prim_kdata)
             transfer_functions.append(h)
 
         # 将所有传递函数组合成矩阵
