@@ -23,7 +23,7 @@ class EDITER:
     def calculate_transfer_function(self, ext_samples, prim_samples):
         """
         Args:
-            convolved_ext_samples: 卷积后的外部线圈数据
+            ext_samples: 外部线圈数据
             prim_samples: 目标数据
 
         Returns:
@@ -132,7 +132,7 @@ class EDITER:
             for left, right in ranges
         ]
 
-    def _calculate_transfer_matrix(self, data_groups):
+    def _calculate_transfer_funtions(self, data_groups):
         """
         计算传递函数矩阵H
         对每个数据组计算传递函数，组成完整的传递函数矩阵
@@ -157,7 +157,7 @@ class EDITER:
         # 第一步：初始分组和传递函数计算
         # OPTM: 这里可以每一组计算出来直接放入H矩阵中，而不是统一分组然后统一计算
         initial_groups = self._split(prim_kdata, ext_kdata)
-        H = self._calculate_transfer_matrix(initial_groups)
+        H = self._calculate_transfer_funtions(initial_groups)
 
         # 第二步：基于相关性的聚类，优化分组
         correlation_ranges = self.cluster_temporal_groups(H)
@@ -174,7 +174,7 @@ class EDITER:
             self.kernel_size = new_kernel_size
 
         # 计算最终的传递函数矩阵
-        final_H = self._calculate_transfer_matrix(final_groups)
+        final_H = self._calculate_transfer_funtions(final_groups)
 
         # 保存训练好的模型
         self.model = (final_H, np.array(actual_ranges))
