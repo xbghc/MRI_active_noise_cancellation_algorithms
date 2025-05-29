@@ -100,20 +100,18 @@ class EDITER:
         padded_ext_kdata = self._apply_padding(ext_kdata)
         ky, kx = padded_ext_kdata[0].shape
 
-        lines = []
-        # 滑动窗口提取特征
-        for i_y in range(ky - delta_ky + 1):
-            for i_x in range(kx - delta_kx + 1):
-                # 提取每个位置的卷积窗口并展平
-                line = np.concatenate(
-                    [
-                        coil[i_y : i_y + delta_ky, i_x : i_x + delta_kx].flatten()
-                        for coil in padded_ext_kdata
-                    ]
-                )
-                lines.append(line)
+        total_samples = ext_kdata.shape[1] * ext_kdata.shape[2]
+        n_features = ext_kdata.shape[0] * delta_ky * delta_kx
+        matrix = np.zeros((total_samples, n_features))
 
-        return np.vstack(lines)
+        # 构建干扰矩阵
+        for i in range(total_samples):
+            x = i % kx
+            y = i // kx
+            window = padded_ext_kdata[:, y : y + delta_ky, x : x + delta_kx]
+            matrix[i, :] = window.flatten()
+
+        return matrix
 
     def _split(self, prim_kdata, ext_kdata, ranges=None):
         """
