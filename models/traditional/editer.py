@@ -142,8 +142,7 @@ class EDITER:
             h = self.calculate_transfer_function(ext_kdata, prim_kdata)
             transfer_functions.append(h)
 
-        # 将所有传递函数组合成矩阵
-        return np.array(transfer_functions).reshape(len(data_groups), -1).T
+        return np.vstack(transfer_functions)
 
     def fit(self, prim_kdata, ext_kdata, new_kernel_size=None):
         """
