@@ -35,12 +35,7 @@ class EDITER:
         ]
         return h
 
-    @staticmethod
-    def transpose_data(primary_matrix, external_matrices):
-        """转置数据矩阵，用于处理不同的数据格式"""
-        return primary_matrix.T, np.array([matrix.T for matrix in external_matrices])
-
-    def _normalize_transfer_matrix(self, H):
+    def _normalize(self, H):
         """
         归一化传递函数矩阵
         对每一列进行L2归一化，避免数值不稳定
@@ -149,9 +144,6 @@ class EDITER:
         训练EDITER模型
         通过分析主线圈和外部线圈的关系，学习传递函数
         """
-        # 数据转置（如果需要）
-        if self.data_transpose:
-            prim_kdata, ext_kdata = self.transpose_data(prim_kdata, ext_kdata)
 
         # 第一步：初始分组和传递函数计算
         # OPTM: 这里可以每一组计算出来直接放入H矩阵中，而不是统一分组然后统一计算
@@ -208,10 +200,6 @@ class EDITER:
             self.fit(prim_kdata, ext_kdata)
 
         H, ranges = self.model
-
-        # 数据转置（如果需要）
-        if self.data_transpose:
-            prim_kdata, ext_kdata = self.transpose_data(prim_kdata, ext_kdata)
 
         # 按照训练时的分组方式分割数据
         data_groups = self._split(prim_kdata, ext_kdata, ranges.tolist())
