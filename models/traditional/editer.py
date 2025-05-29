@@ -39,6 +39,9 @@ class EDITER:
         """
         归一化传递函数矩阵
         对每一列进行L2归一化，避免数值不稳定
+
+        Args:
+            H: 传递函数矩阵，形状为(n_lines, n_coils * (2 * dy + 1) * (2 * dx + 1))
         """
         H_normalized = np.zeros_like(H)
         for col_idx in range(H.shape[1]):
@@ -49,13 +52,13 @@ class EDITER:
                 H_normalized[:, col_idx] = H[:, col_idx]
         return H_normalized
 
-    def cluster_temporal_groups(self, H, threshold=0.5):
+    def _cluster(self, H, threshold=0.5):
         """
         基于相关性对时间组进行聚类
         通过计算传递函数矩阵H的相关性来确定时间组的分组范围
         """
         # 归一化传递函数矩阵，确保相关性计算的准确性
-        H_normalized = self._normalize_transfer_matrix(H)
+        H_normalized = self._normalize(H)
 
         # 计算相关性矩阵 C = H^H * H
         H_conj_T = H_normalized.conj().T
@@ -127,7 +130,7 @@ class EDITER:
             for left, right in ranges
         ]
 
-    def _calculate_transfer_funtions(self, data_groups):
+    def _calculate_transfer_funtions_of_groups(self, data_groups):
         """
         计算传递函数矩阵H
         对每个数据组计算传递函数，组成完整的传递函数矩阵
@@ -148,10 +151,10 @@ class EDITER:
         # 第一步：初始分组和传递函数计算
         # OPTM: 这里可以每一组计算出来直接放入H矩阵中，而不是统一分组然后统一计算
         initial_groups = self._split(prim_kdata, ext_kdata)
-        H = self._calculate_transfer_funtions(initial_groups)
+        H = self._calculate_transfer_funtions_of_groups(initial_groups)
 
         # 第二步：基于相关性的聚类，优化分组
-        correlation_ranges = self.cluster_temporal_groups(H)
+        correlation_ranges = self._cluster(H)
 
         # 将聚类结果映射到实际数据范围
         width = prim_kdata.shape[1] // self.W
@@ -165,7 +168,7 @@ class EDITER:
             self.kernel_size = new_kernel_size
 
         # 计算最终的传递函数矩阵
-        final_H = self._calculate_transfer_funtions(final_groups)
+        final_H = self._calculate_transfer_funtions_of_groups(final_groups)
 
         # 保存训练好的模型
         self.model = (final_H, np.array(actual_ranges))
